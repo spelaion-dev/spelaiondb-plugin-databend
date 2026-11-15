@@ -1,0 +1,32 @@
+# The tests' servers: Databend 1.2.881 (its HTTP query handler on 18310, user spelaion with
+# password spelaion-test, which replaces the image's root), and the same behind TLS on 18443 (a certificate for databend.spelaion.test signed by
+# keys/ca.crt, from testing/gen-keys.sh). Memory is bounded: 1 GB for Databend, 256 MB for the
+# proxy.
+name: spelaion-plugin-databend
+
+services:
+  databend:
+    image: datafuselabs/databend:v1.2.881
+    mem_limit: 1g
+    environment:
+      QUERY_DEFAULT_USER: spelaion
+      QUERY_DEFAULT_PASSWORD: spelaion-test
+    ports:
+      - "127.0.0.1:18310:8000"
+    # No client in the image: the port answering is enough.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000"]
+      interval: 2s
+      retries: 60
+
+  tls:
+    image: haproxy:3.2-alpine
+    mem_limit: 256m
+    depends_on:
+      databend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18443:8443"
+    volumes:
+      - ./tls/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./keys/server.pem:/usr/local/etc/haproxy/server.pem:ro
